@@ -45,11 +45,11 @@ The usual solution is to ask around in WhatsApp groups, buy something unnecessar
 
 It is intentionally **not a marketplace**:
 
-- ❌ No payments
 - ❌ No buying or selling
 - ❌ No ratings or reputation scores
 - ❌ No social following
 - ❌ No unnecessary messaging system
+- ✅ Only an optional, marginal lending fee (per-day or flat, e.g. ~₹20–50/day) — just enough to make lending worth a student's while, not a resale or rental business
 
 The product focuses on one simple workflow:
 
@@ -103,6 +103,17 @@ Authenticated students can:
 
 ### 🤝 Claiming
 A student can claim an open post when they can fulfill it. The claim operation is handled by a PostgreSQL RPC with row locking so two users cannot successfully claim the same item at the same time.
+
+### 💸 Marginal Lending Fee
+"Have" posts can optionally include a small fee set by the lender.
+
+- The fee is meant to be a token incentive, not a rental price — enough to make it worth digging that calculator or adapter out of a drawer, not enough to turn the board into a rental marketplace.
+- Entirely optional — a post can still be listed for free.
+- **Per-day fee** (e.g. ~₹20–50/day) — suited to short-term borrows like electronics, chargers, and accessories, where the total stays trivial even over a few days.
+- **Flat one-time fee** — suited to longer or lower-turnover borrows like textbooks or lab equipment, where a per-day rate would balloon over a semester-length loan or over/undervalue the item.
+- Suggested default fee can vary by category (e.g. electronics/accessories default to a low per-day rate, books/lab equipment default to a flat per-borrow rate) to nudge lenders toward a sensible price without forcing one.
+- Displayed upfront on the post card and detail view so borrowers know the cost before claiming.
+- Settled directly between the two students at pickup/return — CampusBorrow does not process payments, so there's no in-app wallet, checkout, or transaction handling.
 
 ### 🔄 Borrowing Lifecycle
 Owners can move an item through `Open → Claimed → Borrowed → Returned`, giving the board a meaningful state instead of treating posts as static records.
@@ -309,6 +320,8 @@ CampusBorrow intentionally keeps the core data model small.
 | `location` | text | Campus pickup/meeting location |
 | `contact` | text | Contact information |
 | `image_url` | text | Optional image |
+| `fee_type` | enum | `none`, `per_day`, or `flat` |
+| `fee_amount` | numeric | Optional lending fee amount, interpreted per `fee_type`, null if free |
 | `status` | enum | Current lifecycle state |
 | `expires_at` | date | Needed/available until |
 | `created_at` | timestamptz | Creation timestamp |
@@ -425,7 +438,7 @@ CampusBorrow deliberately avoids turning into a full social network or marketpla
 | **Useful** | Every feature supports temporary resource sharing |
 | **Live** | Multiple students should see changes without refreshing |
 | **Safe** | Database permissions should protect user-owned data |
-| **Focused** | No unnecessary payments, ratings, messaging, or social features |
+| **Focused** | No ratings, messaging, or social features — and only a marginal, optional fee, never a rental marketplace |
 
 ---
 
