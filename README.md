@@ -1,216 +1,85 @@
 # CampusBorrow
 
-**Borrow what you need. Share what you have.**
+Borrow what you need. Share what you have.
 
-CampusBorrow is a campus-focused peer-to-peer resource-sharing board built for students. It helps students find temporary access to things they need — calculators, adapters, textbooks, chargers, lab equipment, sports gear, and more — while giving other students an easy way to lend items they already have.
+CampusBorrow is a campus-focused peer-to-peer board for temporarily sharing things students already own — calculators, adapters, textbooks, chargers, lab equipment, sports gear, that kind of thing.
 
-🎥 **Demo Video:** https://drive.google.com/drive/folders/1kv9ZqR_Ggz4g-bDryl835tU_ZL472k-p?usp=sharing
-🌐 **Live Demo:** https://campus-borrow-three.vercel.app/
-💻 **GitHub:** https://github.com/kalainesan-n/CampusBorrow
+**Live demo:** https://campus-borrow-three.vercel.app/
+**GitHub:** https://github.com/kalainesan-n/CampusBorrow
+**Demo video:** https://drive.google.com/drive/folders/1kv9ZqR_Ggz4g-bDryl835tU_ZL472k-p?usp=sharing
 
----
+## The idea
 
-## Table of Contents
+Most of the time when a student needs something — a calculator for tomorrow's exam, an HDMI adapter for a presentation, a textbook someone else finished with last semester — the actual process is asking around in WhatsApp groups and hoping someone responds in time. CampusBorrow just puts that in one place instead of a dozen scattered chats.
 
-- [Why CampusBorrow?](#why-campusborrow)
-- [Core Experience](#core-experience)
-- [Key Features](#key-features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Database Model](#database-model)
-- [Security Model](#security-model)
-- [Realtime](#realtime)
-- [Deployment](#deployment)
-- [Demo Flow](#demo-flow)
-- [Design Philosophy](#design-philosophy)
-- [Future Ideas](#future-ideas)
-- [Project Status](#project-status)
+It's deliberately not a marketplace. No buying/selling, no ratings, no follower system, no built-in chat. The only thing close to "money" is an optional small lending fee a lender can attach to their post — enough to make it worth digging a charger out of a drawer, not enough to make this a rental business. The whole thing is built around one loop:
 
----
+**Post → Discover → Claim → Borrow → Return**
 
-## Why CampusBorrow?
+## How it works
 
-Students often need something for only a few hours or days:
+A post is either a **Need** ("need a scientific calculator for tomorrow") or a **Have** ("French textbook available, Sem 1"). Anyone browsing the board can claim an open post if they can fulfill it, and from there it moves through a simple lifecycle: `Open → Claimed → Borrowed → Returned` (or the owner can just close it if it's no longer available).
 
-- A calculator for an exam
-- An HDMI adapter for a presentation
-- A Semester 1 textbook sitting unused in a second-year student's room
-- A charger, tripod, lab coat, or sports item
+## Features
 
-The usual solution is to ask around in WhatsApp groups, buy something unnecessarily, or simply go without it.
+**Auth** — Supabase email/password, persistent sessions. You can browse the board without an account, but posting or claiming requires one.
 
-**CampusBorrow turns that scattered process into one shared campus board.**
+**Search & filters** — search by title, description, category, or location; filter by Need/Have/My Posts; category tags (Electronics, Academic, Books, Accessories, Sports, Other).
 
-It is intentionally **not a marketplace**:
+**Posts** — authenticated users can create, edit, or delete their own posts, with title, description, category, location, contact info, an optional image, and an optional "needed/available until" date.
 
-- ❌ No buying or selling
-- ❌ No ratings or reputation scores
-- ❌ No social following
-- ❌ No unnecessary messaging system
-- ✅ Only an optional, marginal lending fee (per-day or flat, e.g. ~₹20–50/day) — just enough to make lending worth a student's while, not a resale or rental business
+**Claiming** — handled through a Postgres RPC (`claim_item`) that locks the row before assigning it, so two people can't both successfully claim the same item at the same time. This was one of the trickier parts to get right — a naive check-then-update from the client has an obvious race condition if two people tap claim within the same second.
 
-The product focuses on one simple workflow:
+**Optional lending fee** — a lender can attach a small fee to a Have post, either per-day (for short electronics/accessory borrows) or a flat one-time amount (for things like textbooks where a per-day rate doesn't make sense over a semester). It's entirely optional, shown on the post before anyone claims it, and settled directly between the two students — CampusBorrow doesn't touch payments at all, no wallet or checkout flow.
 
-> **Post → Discover → Claim → Borrow → Return**
+**Realtime** — Supabase Realtime keeps everyone's view in sync. When someone creates a post, edits one, claims something, or changes its status, other people looking at the board see it update without refreshing.
 
----
+**Row Level Security** — permissions are enforced in Postgres, not just hidden in the UI: anyone can read posts, only authenticated users can create them, only the owner can edit/delete/change status, and claiming only goes through the locked RPC rather than a direct row update.
 
-## Core Experience
+**Images** — optional item photos go into a Supabase Storage bucket, validated client-side before upload.
 
-CampusBorrow supports two kinds of posts:
+**Responsive** — multi-column feed on desktop, collapses to single column on mobile.
 
-| Type | Description | Example |
-|---|---|---|
-| 🔵 **Need** | A student posts something they need to borrow | *"Need a scientific calculator for tomorrow's exam"* |
-| 🟢 **Have** | A student posts something they have available to lend | *"French textbook for Semester 1 available"* |
+**Error/loading states** — loading skeletons, empty states, inline form validation, toast feedback, retry on failed requests.
 
-Other students can discover the post and claim it when they can fulfill the request.
+## Tech stack
 
-### Item Lifecycle
-
-```
-OPEN → CLAIMED → BORROWED → RETURNED
-```
-
-An owner can also close a post when it is no longer available.
-
----
-
-## Key Features
-
-### 🔐 Authentication
-- Supabase Email/Password authentication
-- Persistent sessions
-- Sign in / Sign up / Sign out
-- Anonymous visitors can browse the board
-- Posting and claiming require authentication
-
-### 🔎 Search & Discovery
-- Search across title, description, category, and location
-- Filter by **All / Need / Have / My Posts**
-- Category filters: ⚡ Electronics · 🎓 Academic · 📚 Books · 🎒 Accessories · ⚽ Sports · 📦 Other
-
-### 📝 Create & Edit Posts
-Authenticated students can:
-- Create Need or Have posts
-- Add title, description, category, and campus location
-- Add contact information
-- Set a needed/available-until date
-- Upload an optional image
-- Edit or delete their own posts
-
-### 🤝 Claiming
-A student can claim an open post when they can fulfill it. The claim operation is handled by a PostgreSQL RPC with row locking so two users cannot successfully claim the same item at the same time.
-
-### 💸 Marginal Lending Fee
-"Have" posts can optionally include a small fee set by the lender.
-
-- The fee is meant to be a token incentive, not a rental price — enough to make it worth digging that calculator or adapter out of a drawer, not enough to turn the board into a rental marketplace.
-- Entirely optional — a post can still be listed for free.
-- **Per-day fee** (e.g. ~₹20–50/day) — suited to short-term borrows like electronics, chargers, and accessories, where the total stays trivial even over a few days.
-- **Flat one-time fee** — suited to longer or lower-turnover borrows like textbooks or lab equipment, where a per-day rate would balloon over a semester-length loan or over/undervalue the item.
-- Suggested default fee can vary by category (e.g. electronics/accessories default to a low per-day rate, books/lab equipment default to a flat per-borrow rate) to nudge lenders toward a sensible price without forcing one.
-- Displayed upfront on the post card and detail view so borrowers know the cost before claiming.
-- Settled directly between the two students at pickup/return — CampusBorrow does not process payments, so there's no in-app wallet, checkout, or transaction handling.
-
-### 🔄 Borrowing Lifecycle
-Owners can move an item through `Open → Claimed → Borrowed → Returned`, giving the board a meaningful state instead of treating posts as static records.
-
-### ⚡ Realtime Synchronization
-Supabase Realtime keeps multiple browser sessions synchronized. When one user creates, edits, claims, changes the status of, or deletes a post, other connected users see the change without manually refreshing the page.
-
-### 🛡️ Row Level Security
-Database permissions are enforced by Supabase RLS:
-- Anyone can read public items
-- Only authenticated users can create items
-- Users can modify only their own posts
-- Users cannot delete another student's post
-- Claiming is handled through a controlled server-side database function
-
-### 🖼️ Image Storage
-Optional item images are stored in a Supabase Storage bucket, validated on the client before upload.
-
-### 📱 Responsive UI
-Designed for desktop, tablet, and mobile — the feed adapts from a multi-column layout on larger screens to a single-column experience on mobile.
-
-### ♿ UX & Error Handling
-- Loading skeletons
-- Empty states
-- Search/filter reset states
-- Inline form validation
-- Toast feedback
-- Retryable error states
-- Protected actions for authenticated users
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | Next.js 16 |
-| UI | React 19 + TypeScript |
-| Styling | Tailwind CSS 4 |
-| Authentication | Supabase Auth |
-| Database | Supabase PostgreSQL |
-| Security | PostgreSQL Row Level Security |
-| Server Logic | PostgreSQL RPC |
-| Storage | Supabase Storage |
-| Realtime | Supabase Realtime |
-| Deployment | Vercel |
-
----
+- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4
+- **Backend:** Supabase (Postgres, Auth, Storage, Realtime)
+- **Server-side logic:** a Postgres RPC function for atomic claiming
+- **Deployment:** Vercel
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────┐
-│                CampusBorrow UI                │
-│          Next.js + React + TypeScript         │
-└──────────────────────┬───────────────────────┘
+Next.js / React / TypeScript frontend
+              │
+              ▼
+        Supabase client
+        │            │
+        ▼            ▼
+  Supabase Auth   Postgres (items table + RLS)
                         │
                         ▼
-┌──────────────────────────────────────────────┐
-│               Supabase Client                 │
-└──────────────┬───────────────┬────────────────┘
-               │               │
-       ┌───────▼──────┐  ┌────▼─────────────┐
-       │ Supabase Auth│  │ PostgreSQL        │
-       │              │  │ items + RLS       │
-       └──────────────┘  └────┬──────────────┘
-                               │
-                      ┌────────▼─────────┐
-                      │ claim_item RPC   │
-                      │ atomic claiming  │
-                      └──────────────────┘
-                               │
-                ┌──────────────┴─────────────┐
-                ▼                             ▼
-       ┌────────────────┐           ┌─────────────────┐
-       │ Supabase       │           │ Supabase        │
-       │ Storage        │           │ Realtime        │
-       │ item-images    │           │ postgres_changes│
-       └────────────────┘           └─────────────────┘
+                 claim_item() RPC
+                 (row-locked, atomic)
+                   │           │
+                   ▼           ▼
+          Supabase Storage   Supabase Realtime
+          (item images)      (postgres_changes)
 ```
 
----
-
-## Project Structure
+## Project structure
 
 ```
 CampusBorrow/
 ├── app/
 │   ├── auth/
-│   │   ├── sign-in/
-│   │   │   └── page.tsx
-│   │   └── sign-up/
-│   │       └── page.tsx
+│   │   ├── sign-in/page.tsx
+│   │   └── sign-up/page.tsx
 │   ├── globals.css
 │   ├── layout.tsx
 │   └── page.tsx
-│
 ├── components/
 │   ├── CategoryFilters.tsx
 │   ├── EmptyState.tsx
@@ -223,38 +92,24 @@ CampusBorrow/
 │   ├── LoadingSkeleton.tsx
 │   ├── SearchBar.tsx
 │   └── ToastProvider.tsx
-│
 ├── hooks/
 │   ├── useAuth.ts
 │   ├── useItems.ts
 │   └── useRealtimeItems.ts
-│
 ├── lib/
-│   └── supabase/
-│       └── client.ts
-│
+│   └── supabase/client.ts
 ├── supabase/
 │   └── schema.sql
-│
 ├── types/
 │   └── index.ts
-│
 ├── .env.example
 ├── package.json
 └── README.md
 ```
 
----
+## Running it locally
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- npm
-- A Supabase project
-
-### 1. Clone the repository
+You'll need Node 18+, npm, and a Supabase project.
 
 ```bash
 git clone https://github.com/kalainesan-n/CampusBorrow.git
@@ -262,228 +117,70 @@ cd CampusBorrow
 npm install
 ```
 
-### 2. Configure Supabase
+**Set up Supabase:** in the Supabase dashboard, go to SQL Editor → New Query, and run the full script in `supabase/schema.sql`. That sets up the `item_type`/`item_status` enums, the `items` table, indexes, RLS policies, the `claim_item()` RPC, the `item-images` storage bucket and its policies, and Realtime.
 
-Go to **Supabase Dashboard → SQL Editor → New Query** and run the complete SQL script at `supabase/schema.sql`.
+Then go to Authentication → Providers → Email and enable it. For local testing you can turn off email confirmation so you're not stuck waiting on a verification email.
 
-This creates:
-- `item_type` enum
-- `item_status` enum
-- `items` table
-- indexes
-- Row Level Security policies
-- `claim_item()` RPC
-- `item-images` storage bucket
-- storage policies
-- Realtime configuration
-
-**Authentication:** Go to **Authentication → Providers → Email** and enable Email authentication. For development/demo environments, email confirmation can be disabled if immediate sign-in after registration is preferred.
-
-### 3. Environment Variables
-
-Create `.env.local` in the project root:
+**Environment variables** — create `.env.local`:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key
 ```
 
-These values are available in **Supabase Dashboard → Project Settings → API**.
-
-> ⚠️ **Important:** Never commit `.env.local`. Do not put a Supabase service-role key in frontend code — only public client credentials should be exposed to the browser.
-
-### 4. Run locally
+(found under Project Settings → API in the Supabase dashboard). Never commit this file, and never put the service-role key anywhere in frontend code — only the public anon key belongs in the browser.
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Then open http://localhost:3000.
 
----
+## Data model
 
-## Database Model
+Kept intentionally small — one main table, `items`:
 
-CampusBorrow intentionally keeps the core data model small.
-
-### `items`
-
-| Column | Type | Purpose |
+| Column | Type | Notes |
 |---|---|---|
-| `id` | uuid | Unique item ID |
-| `user_id` | uuid | Student who created the post |
-| `claimed_by` | uuid | Student who claimed/fulfilled it |
+| `id` | uuid | primary key |
+| `user_id` | uuid | who posted it |
+| `claimed_by` | uuid | who claimed it, if anyone |
 | `type` | enum | `need` or `offer` |
-| `title` | text | Item/request title |
-| `description` | text | Details |
-| `category` | text | Item category |
-| `location` | text | Campus pickup/meeting location |
-| `contact` | text | Contact information |
-| `image_url` | text | Optional image |
-| `fee_type` | enum | `none`, `per_day`, or `flat` |
-| `fee_amount` | numeric | Optional lending fee amount, interpreted per `fee_type`, null if free |
-| `status` | enum | Current lifecycle state |
-| `expires_at` | date | Needed/available until |
-| `created_at` | timestamptz | Creation timestamp |
+| `title` | text | |
+| `description` | text | |
+| `category` | text | |
+| `location` | text | campus pickup spot |
+| `contact` | text | |
+| `image_url` | text | optional |
+| `fee_type` | enum | `none`, `per_day`, `flat` |
+| `fee_amount` | numeric | null if free |
+| `status` | enum | `open`, `claimed`, `borrowed`, `returned`, `closed` |
+| `expires_at` | date | needed/available until |
+| `created_at` | timestamptz | |
 
-**Status values:** `open` · `claimed` · `borrowed` · `returned` · `closed`
+## Security
 
----
+RLS does the actual enforcement here, not the frontend:
 
-## Security Model
+- anyone can read posts, signed in or not
+- creating a post requires `user_id = auth.uid()`
+- only the owner can edit, close, or delete their own post
+- claiming never goes through a direct row update from the client — it's routed through `claim_item(item_id)`, which checks the caller is authenticated, locks the row, confirms the item is still open, blocks the owner from claiming their own post, then assigns `claimed_by` and flips the status to `claimed`
 
-CampusBorrow uses **Row Level Security** instead of relying only on frontend checks.
-
-- **Public read** — anyone can browse the board without signing in.
-- **Authenticated creation** — a user can create an item only when `user_id = auth.uid()`.
-- **Owner controls** — only the owner can edit, close, change status, or delete their post.
-- **Claim protection** — claiming is handled by `claim_item(item_id)`, a PostgreSQL function that:
-  1. Checks that the caller is authenticated
-  2. Locks the target row
-  3. Confirms the item is still open
-  4. Prevents the owner from claiming their own post
-  5. Assigns the authenticated user as `claimed_by`
-  6. Changes the status to `claimed`
-
-This makes claiming atomic and protects against two users attempting to claim the same item simultaneously.
-
----
+That row lock is what actually prevents the double-claim race condition, which is the main reason this is a database function instead of a plain update call.
 
 ## Realtime
 
-The application subscribes to PostgreSQL changes on the `items` table:
-
-```
-INSERT  → new post appears
-UPDATE  → edits/status changes appear
-DELETE  → removed post disappears
-```
-
-This allows the application to behave like a shared live board rather than requiring users to refresh the page.
-
-### Two-user demo
-
-```
-Browser A                          Browser B
-─────────                          ─────────
-Student A                          Student B
-
-Create post
-    │
-    └──────────── Realtime ───────────────►
-                                      Post appears
-
-                                      Claim item
-    ◄──────────── Realtime ────────────────┘
-Status → CLAIMED
-
-Mark Borrowed
-    │
-    └──────────── Realtime ───────────────►
-                                      Status → BORROWED
-
-Mark Returned
-    │
-    └──────────── Realtime ───────────────►
-                                      Status → RETURNED
-```
-
----
+The app subscribes to Postgres changes on `items` — inserts, updates, and deletes all propagate to every connected browser without a manual refresh. Easiest way to see it: open the app in two browser windows, post something in one, and watch it show up in the other in real time, then claim it and watch the status change reflect on both sides.
 
 ## Deployment
 
-CampusBorrow is deployed on Vercel.
+Deployed on Vercel, connected to the GitHub repo. To deploy your own copy: push to GitHub, import the repo into Vercel, add the two `NEXT_PUBLIC_SUPABASE_*` environment variables, and Vercel handles the Next.js build.
 
-- **Live application:** https://campus-borrow-three.vercel.app/
-- **GitHub repository:** https://github.com/kalainesan-n/CampusBorrow
+## What's deliberately not in here
 
-### Deploy your own instance
+No campus email verification, no notifications, no in-app messaging, no borrow history or reputation system, no reservation windows, no QR handoff confirmation, no multi-campus support. All reasonable next steps, all cut from this version to keep the scope to something I could actually finish and test properly.
 
-1. Push the repository to GitHub.
-2. Import the repository into Vercel.
-3. Add these environment variables:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=your-supabase-project-url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-   ```
-4. Deploy — Vercel will run the Next.js production build automatically.
+## Status
 
----
-
-## Demo Flow
-
-The intended demonstration follows the complete product loop:
-
-1. **Post** — a student posts something they need or have
-2. **Discover** — another student searches or filters the campus board
-3. **Claim** — the second student claims the item
-4. **Borrow** — the owner marks the item as borrowed
-5. **Return** — the owner marks it as returned
-
-```
-POST → DISCOVER → CLAIM → BORROW → RETURN
-```
-
-This is the central interaction the application is designed around.
-
----
-
-## Design Philosophy
-
-CampusBorrow deliberately avoids turning into a full social network or marketplace. The design priorities are:
-
-| Priority | Meaning |
-|---|---|
-| **Simple** | A student should understand the app immediately |
-| **Useful** | Every feature supports temporary resource sharing |
-| **Live** | Multiple students should see changes without refreshing |
-| **Safe** | Database permissions should protect user-owned data |
-| **Focused** | No ratings, messaging, or social features — and only a marginal, optional fee, never a rental marketplace |
-
----
-
-## Future Ideas
-
-The MVP intentionally excludes features that would increase scope. Potential future versions could explore:
-
-- Campus email verification
-- Notifications
-- In-app messaging
-- Borrow history
-- Trust/reputation systems
-- Reservation windows
-- QR-based handoff confirmation
-- Multiple campus support
-
-These are deliberately **not part of the current MVP**.
-
----
-
-## Project Status
-
-**CampusBorrow MVP — Complete**
-
-- [x] Next.js App Router
-- [x] React + TypeScript
-- [x] Responsive UI
-- [x] Supabase Authentication
-- [x] PostgreSQL database
-- [x] Row Level Security
-- [x] Atomic claim RPC
-- [x] Supabase Storage
-- [x] Supabase Realtime
-- [x] Need / Have posts
-- [x] Search and filters
-- [x] Item lifecycle
-- [x] Edit/delete ownership controls
-- [x] Loading, empty, and error states
-- [x] Production build verification
-- [x] Vercel deployment
-
----
-
-**Built for students, by students.**
-
-**CampusBorrow** — *Borrow what you need. Share what you have.*
-
-🎥 [Demo Video](https://drive.google.com/drive/folders/1kv9ZqR_Ggz4g-bDryl835tU_ZL472k-p?usp=sharing) · 🌐 [Live Demo](https://campus-borrow-three.vercel.app/) · 💻 [GitHub](https://github.com/kalainesan-n/CampusBorrow)
+MVP is complete and deployed: auth, posts, search/filters, the claim RPC with row locking, realtime sync, image upload, RLS across the board, and the full lifecycle from open to returned. Tested the whole post → discover → claim → borrow → return loop across two browser sessions to confirm the realtime sync actually works the way it's supposed to, not just in theory.
